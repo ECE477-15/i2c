@@ -1,0 +1,12 @@
+HAL_Driver
+startup
+Utilities
+CMSIS
+.settings
+STM32L0538-DISCO.xml
+.DS_Store
+.cproject
+.project
+LinkerScript.ld
+Debug
+i2c.cfg
