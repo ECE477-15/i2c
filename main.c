@@ -11,51 +11,105 @@
 #include "stm32l0xx.h"
 #include "stm32l0538_discovery.h"
 
-void I2C_Tx(uint16_t DevAddress, uint8_t *pData, uint16_t Size);
 void I2C_Init();
+void I2C_Mem_Tx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+void I2C_Mem_Rx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 
 int main(void)
 {
   I2C_Init();
 
-  uint8_t data[2] = {0x3D, 0xFF};
-  I2C_Tx(0x32<<1, data, 2);
+  uint8_t data[1] = {0xFF};
+  I2C_Mem_Tx(0x32, 0x3D, 1, data, 1); // reset chip
 
-  data[0] = 0x00;
-  data[1] = 0x40;
-  I2C_Tx(0x32<<1, data, 2);
+  data[0] = 0x40;
+  I2C_Mem_Tx(0x32, 0x00, 1, data, 1); // chip enable
 
-  data[0] = 0x36;
-  data[1] = 0x53;
-  I2C_Tx(0x32<<1, data, 2);
+  data[0] = 0x53;
+  I2C_Mem_Tx(0x32, 0x36, 1, data, 1); // chip clock enable
 
-  data[0] = 0x16;
-  data[1] = 0xFF;
-  I2C_Tx(0x32<<1, data, 2);
+  data[0] = 0xFF;
+  I2C_Mem_Tx(0x32, 0x16, 1, data, 1); // turn on LED
+
+  data[0] = 0b00000100;
+  I2C_Mem_Tx(0x32, 0x3E, 1, data, 1); // take temperature sample
 
   int i = 0;
+  while(i < 10000) {
+    i++;
+  }
+
+  I2C_Mem_Rx(0x32, 0x3F, 1, data, 1); // read temperature
+
+  i = 0;
 	while(i < 100000) {
 		i++;
 	}
 
-  data[0] = 0x3D;
-  data[1] = 0xFF;
-  I2C_Tx(0x32<<1, data, 2);
+  data[0] = 0xFF;
+  I2C_Mem_Tx(0x32, 0x3D, 1, data, 1); // reset chip
 
   while (1);
 }
 
-void I2C_Tx(uint16_t DevAddress, uint8_t *pData, uint16_t Size) {
+void I2C_Mem_Tx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size) {
 	while(I2C2->ISR & I2C_ISR_BUSY);
 
+	device_addr <<= 1;
+	uint16_t size = reg_addr_size + data_size;
+
 	I2C2->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RELOAD | I2C_CR2_AUTOEND | I2C_CR2_RD_WRN | I2C_CR2_START | I2C_CR2_STOP);
-	I2C2->CR2 |= (DevAddress & I2C_CR2_SADD) | (Size << I2C_CR2_NBYTES_Pos) | I2C_CR2_AUTOEND | I2C_CR2_START;
+	I2C2->CR2 |= (device_addr & I2C_CR2_SADD) | (size << I2C_CR2_NBYTES_Pos) | I2C_CR2_AUTOEND | I2C_CR2_START;
 
-	while(!(I2C2->ISR & I2C_ISR_TXIS));
-	I2C2->TXDR = pData[0];
+	if(reg_addr_size == 2) {	// send reg_addr MSB
+		while(!(I2C2->ISR & I2C_ISR_TXIS));
+		I2C2->TXDR = ((reg_addr >> 8) & 0xFF);
+	}
 
-	while(!(I2C2->ISR & I2C_ISR_TXIS));
-	I2C2->TXDR = pData[1];
+	while(!(I2C2->ISR & I2C_ISR_TXIS));	// send reg_addr LSB
+	I2C2->TXDR = (reg_addr & 0xFF);
+
+	uint8_t * data_pointer = data;
+	for(uint16_t tx_remaining = data_size; tx_remaining > 0; tx_remaining--) {
+		while(!(I2C2->ISR & I2C_ISR_TXIS));
+		I2C2->TXDR = *data_pointer;
+
+		data_pointer++;
+	}
+
+	while(!(I2C2->ISR & I2C_ISR_STOPF));
+	I2C2->ICR |= I2C_ICR_STOPCF;
+}
+
+void I2C_Mem_Rx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size) {
+	while(I2C2->ISR & I2C_ISR_BUSY);
+
+	device_addr <<= 1;
+
+	I2C2->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RELOAD | I2C_CR2_AUTOEND | I2C_CR2_RD_WRN | I2C_CR2_START | I2C_CR2_STOP);
+	I2C2->CR2 |= (device_addr & I2C_CR2_SADD) | (reg_addr_size << I2C_CR2_NBYTES_Pos) | I2C_CR2_START;
+
+	if(reg_addr_size == 2) {	// send reg_addr MSB
+		while(!(I2C2->ISR & I2C_ISR_TXIS));
+		I2C2->TXDR = ((reg_addr >> 8) & 0xFF);
+	}
+
+	while(!(I2C2->ISR & I2C_ISR_TXIS));	// send reg_addr LSB
+	I2C2->TXDR = (reg_addr & 0xFF);
+
+	while(!(I2C2->ISR & I2C_ISR_TC));	// wait for tx complete
+
+	I2C2->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RELOAD | I2C_CR2_AUTOEND | I2C_CR2_RD_WRN | I2C_CR2_START | I2C_CR2_STOP);
+	I2C2->CR2 |= (device_addr & I2C_CR2_SADD) | (data_size << I2C_CR2_NBYTES_Pos) | I2C_CR2_AUTOEND | I2C_CR2_START | I2C_CR2_RD_WRN;
+
+
+	uint8_t * data_pointer = data;
+	for(uint16_t tx_remaining = data_size; tx_remaining > 0; tx_remaining--) {
+		while(!(I2C2->ISR & I2C_ISR_RXNE));	// wait for read data
+		*data_pointer = I2C2->RXDR;
+
+		data_pointer++;
+	}
 
 	while(!(I2C2->ISR & I2C_ISR_STOPF));
 	I2C2->ICR |= I2C_ICR_STOPCF;
@@ -85,9 +139,5 @@ void I2C_Init() {
 
     I2C2->OAR2 &= ~I2C_OAR2_OA2EN_Msk;	// Disable own address 2
 
-    I2C2->CR1 = (I2C_GENERALCALL_DISABLE | I2C_NOSTRETCH_DISABLE);
-
     I2C2->CR1 |= I2C_CR1_PE;		// Enable I2C2
 }
-
-
