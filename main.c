@@ -16,12 +16,11 @@
 void I2C_Init();
 void I2C_Mem_Tx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 void I2C_Mem_Rx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
-void printSOC(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+uint16_t BB_getSOC(void);
 void printVolt(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 void printSOH(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 void printRemCap(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 
-uint16_t Soc;
 uint16_t Volt;
 uint16_t Soh;
 uint16_t sohPercent;
@@ -53,8 +52,8 @@ int main(void)
     i++;
   }
 
-  uint8_t soc[0];// = {0x53};
-  printSOC(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_SOC, 1, soc, 2); // take battery babysitter Reads and returns the battery state of charge (in %)
+  // Get the battery state of charge from the Battery Babysitter (in %)
+  uint16_t soc = BB_getSOC();
 
   uint8_t volt[0];
   printVolt(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_VOLTAGE, 1, volt, 2); // take battery babysitter Reads and returns the battery voltage (in mV)
@@ -169,15 +168,16 @@ void I2C_Init() {
     I2C2->CR1 |= I2C_CR1_PE;		// Enable I2C2
 }
 
-void printSOC(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
+uint16_t BB_getSOC(void) {
+	uint8_t data[2];
+	
+	I2C_Mem_Rx(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_SOC, 1, data, 2);
 
-	I2C_Mem_Rx(device_addr, reg_addr, reg_addr_size, data, data_size);
-//	uint8_t value;
-//	value = data[1];
-
-	Soc = (data[1]<<8) | data[0];
-
+	uint16_5 Soc = (data[1]<<8) | data[0];
+	
 //	printf("The battery state-of-charge is %d %",Soc);
+	
+	return Soc
 }
 
 void printVolt(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
