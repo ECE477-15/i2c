@@ -8,271 +8,206 @@
   ******************************************************************************
 */
 
-
 #include "stm32l0xx.h"
 #include "stm32l0538_discovery.h"
-#include "stm32l0538_discovery_epd.h"
-#include <stdio.h>
-#include <math.h>
+#include "babysitter.h"
+//#include <SparkFunBQ27441.h>
 
-void initGPIO();
-void initDisplay();
+void I2C_Init();
+void I2C_Mem_Tx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+void I2C_Mem_Rx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+void printSOC(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+void printVolt(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+void printSOH(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+void printRemCap(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 
-#define I2C_TIMING 0x00B21847 //400k
-
-#define TEMP_LOW 0x00
-#define TEMP_HIGH 0x01
-#define HUMID_LOW 0x02
-#define HUMID_HIGH 0x03
-#define INTERRUPT_DRDY 0x04
-#define TEMP_MAX 0x05
-#define HUMID_MAX 0x06
-#define INTERRUPT_CONFIG 0x07
-#define TEMP_OFFSET_ADJUST 0x08
-#define HUM_OFFSET_ADJUST 0x09
-#define TEMP_THR_L 0x0A
-#define TEMP_THR_H 0x0B
-#define HUMID_THR_L 0x0C
-#define HUMID_THR_H 0x0D
-#define CONFIG 0x0E
-#define MEASUREMENT_CONFIG 0x0F
-#define MID_L 0xFC
-#define MID_H 0xFD
-#define DEVICE_ID_L 0xFE
-#define DEVICE_ID_H 0xFF
-#define HTAddr 0x40
-#define altHTAddr 0x41
-
-
-/////
-/////  ______________________________________________________________
-/////            init GPIO
-
-void initGPIO()
-{
-	// high level overview
-	// enable pins pB8 and pb9 for i2c1
-	// enable i2c1
-	// enable high speed clock
-	// set i2c clock speed
-	__GPIOB_CLK_ENABLE();
-	__HAL_RCC_GPIOB_CLK_ENABLE();
-
-	GPIO_InitTypeDef  GPIO_InitStruct;
-	GPIO_InitStruct.Pin       = GPIO_PIN_9|GPIO_PIN_8;
-	GPIO_InitStruct.Mode      = GPIO_MODE_AF_OD;
-//	GPIO_InitStruct.Pull      = GPIO_NOPULL;
-	GPIO_InitStruct.Pull      = GPIO_PULLUP;
-	GPIO_InitStruct.Speed     = GPIO_SPEED_FREQ_HIGH  ;
-	GPIO_InitStruct.Alternate = GPIO_AF1_I2C1;
-
-	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-}
-
-/////
-/////  ______________________________________________________________
-/////			 init Display
-
-void initDisplay()
-{
-	BSP_EPD_Init();
-	//BSP_EPD_Clear(EPD_COLOR_WHITE);
-	BSP_EPD_DisplayChar(0, 12, 'T');
-	BSP_EPD_DisplayChar(8, 12, 'e');
-	BSP_EPD_DisplayChar(16, 12, 'm');
-	BSP_EPD_DisplayChar(24, 12, 'p');
-	BSP_EPD_DisplayChar(32, 12, ':');
-	BSP_EPD_DisplayChar(0, 8, 'H');
-	BSP_EPD_DisplayChar(8, 8, 'u');
-	BSP_EPD_DisplayChar(16, 8, 'm');
-	BSP_EPD_DisplayChar(24, 8, 'i');
-	BSP_EPD_DisplayChar(32, 8, 'd');
-	BSP_EPD_DisplayChar(40, 8, 'i');
-	BSP_EPD_DisplayChar(48, 8, 't');
-	BSP_EPD_DisplayChar(56, 8, 'y');
-	BSP_EPD_DisplayChar(64, 8, ':');
-	BSP_EPD_RefreshDisplay();
-}
-
-/////
-/////  ______________________________________________________________
-/////			 clearDisp
-// must refresh after
-void clearDisp()
-{
-	BSP_EPD_Clear(EPD_COLOR_LIGHTGRAY);
-	BSP_EPD_DisplayChar(0, 12, 'T');
-	BSP_EPD_DisplayChar(8, 12, 'e');
-	BSP_EPD_DisplayChar(16, 12, 'm');
-	BSP_EPD_DisplayChar(24, 12, 'p');
-	BSP_EPD_DisplayChar(32, 12, ':');
-	BSP_EPD_DisplayChar(0, 8, 'H');
-	BSP_EPD_DisplayChar(8, 8, 'u');
-	BSP_EPD_DisplayChar(16, 8, 'm');
-	BSP_EPD_DisplayChar(24, 8, 'i');
-	BSP_EPD_DisplayChar(32, 8, 'd');
-	BSP_EPD_DisplayChar(40, 8, 'i');
-	BSP_EPD_DisplayChar(48, 8, 't');
-	BSP_EPD_DisplayChar(56, 8, 'y');
-	BSP_EPD_DisplayChar(64, 8, ':');
-}
-
-/////
-///////HAL_I2C_Mem_Read(I2C_HandleTypeDef *hi2c, uint16_t DevAddress, uint16_t MemAddress, uint16_t MemAddSize, uint8_t *pData, uint16_t Size, uint32_t Timeout);
-/////  ______________________________________________________________
-/////			 read Temp
-
-float readTemp(I2C_HandleTypeDef *hi2c) {
-	uint8_t byte[2];
-	uint16_t temp;
-	if (HAL_OK != HAL_I2C_Mem_Read(hi2c, HTAddr, 0x00, I2C_MEMADD_SIZE_8BIT, &byte[0], 0x01, HAL_MAX_DELAY))
-	{
-		BSP_EPD_DisplayChar(80, 12, 'N');
-		BSP_EPD_DisplayChar(88, 12, 'M');
-		BSP_EPD_RefreshDisplay();
-	}
-	if (HAL_OK != HAL_I2C_Mem_Read(hi2c, HTAddr, 0x01, I2C_MEMADD_SIZE_8BIT, &byte[1], 0x01, HAL_MAX_DELAY))
-	{
-		BSP_EPD_DisplayChar(80, 12, 'N');
-		BSP_EPD_DisplayChar(88, 12, 'M');
-		BSP_EPD_RefreshDisplay();
-	}
-
-	temp = (unsigned int)byte[1] << 8 | byte[0];
-
-	return (float)(temp) * 165 / 65536 - 40;
-}
-
-/////
-/////  ______________________________________________________________
-/////			 read Humidity
-
-float readHumi(I2C_HandleTypeDef *hi2c) {
-	uint8_t byte[2];
-	uint16_t humidity;
-	if (HAL_OK != HAL_I2C_Mem_Read(hi2c, HTAddr, 0x02, I2C_MEMADD_SIZE_8BIT, &byte[0], 0x01, HAL_MAX_DELAY))
-	{
-		BSP_EPD_DisplayChar(80, 12, 'N');
-		BSP_EPD_DisplayChar(88, 12, 'M');
-		BSP_EPD_RefreshDisplay();
-	}
-	if (HAL_OK != HAL_I2C_Mem_Read(hi2c, HTAddr, 0x03, I2C_MEMADD_SIZE_8BIT, &byte[1], 0x01, HAL_MAX_DELAY))
-	{
-		BSP_EPD_DisplayChar(80, 12, 'N');
-		BSP_EPD_DisplayChar(88, 12, 'M');
-		BSP_EPD_RefreshDisplay();
-	}
-
-	humidity = (unsigned int)byte[1] << 8 | byte[0];
-
-	return (float)(humidity)/( 65536 )* 100;
-
-}
-
-
-/////
-/////  ______________________________________________________________
-/////
-
-// LD3 = PB4
-// LD4 = PA5
+uint16_t Soc;
+uint16_t Volt;
+uint16_t Soh;
+uint16_t sohPercent;
+uint16_t Rcap;
 
 int main(void)
 {
+  I2C_Init();
 
-	//_________INITIALIZATIONS______________________________________________
-	I2C_HandleTypeDef hi2c;
+//  uint8_t data[1] = {0xFF};
+//  I2C_Mem_Tx(0x32, 0x3D, 1, data, 1); // reset chip
+////
+//  data[0] = 0x40;
+//  I2C_Mem_Tx(0x32, 0x00, 1, data, 1); // chip enable
+////
+//  data[0] = 0x53;
+//  I2C_Mem_Tx(0x32, 0x36, 1, data, 1); // chip clock enable
+////
+//  data[0] = 0xFF;
+//  I2C_Mem_Tx(0x32, 0x16, 1, data, 1); // turn on LED
+//
+//  data[0] = 0b00000100;
+//  I2C_Mem_Tx(0x32, 0x3E, 1, data, 1); // take temperature sample
 
-	HAL_Init();
-	initGPIO();
-	initDisplay();
 
-	//______________________________________________________________________
-	// Enable/ Initialize I2C
-	__I2C1_CLK_ENABLE();
-	__HAL_RCC_I2C1_CLK_ENABLE();
 
-	// Initialize i2c struct
-	hi2c.Instance = I2C1;
-	hi2c.Init.Timing = I2C_TIMING; // 400 khz
-	hi2c.Init.OwnAddress1 = 0;
-	hi2c.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-	if(HAL_I2C_Init(&hi2c) != HAL_OK)
-	{
-		// error handler
-		BSP_EPD_DisplayChar(80, 12, 'N');
-		BSP_EPD_DisplayChar(88, 12, 'I');
-		BSP_EPD_RefreshDisplay();
+  int i = 0;
+  while(i < 10000) {
+    i++;
+  }
+
+  uint8_t soc[0];// = {0x53};
+  printSOC(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_SOC, 1, soc, 2); // take battery babysitter Reads and returns the battery state of charge (in %)
+
+  uint8_t volt[0];
+  printVolt(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_VOLTAGE, 1, volt, 2); // take battery babysitter Reads and returns the battery voltage (in mV)
+
+  uint8_t soh[0];
+  printSOH(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_SOH, 1, soh, 2); // take battery babysitter Reads and returns the battery voltage (in mV)
+
+  uint8_t rcap[0];
+  printRemCap(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_REM_CAPACITY, 1, rcap, 2); // take battery babysitter Reads and returns the remaining capacity (in mAh)
+
+//
+//  I2C_Mem_Rx(0x32, 0x3F, 1, data, 1); // read temperature
+//
+  i = 0;
+	while(i < 100000) {
+		i++;
 	}
+//
+//  data[0] = 0xFF;
+//  I2C_Mem_Tx(0x32, 0x3D, 1, data, 1); // reset chip
 
-
-	//______________________________________________________________________
-	// Check I2C Device
-
-	if (HAL_OK != HAL_I2C_IsDeviceReady(&hi2c, altHTAddr, 1, HAL_MAX_DELAY)) // test if device is ready
-	{
-
-		BSP_EPD_DisplayChar(80, 12, 'N');
-		BSP_EPD_DisplayChar(88, 12, 'R');
-		BSP_EPD_RefreshDisplay();
-	}
-
-	HAL_Delay(500);
-
-	//______________________________________________________________________
-	// Read device registers I2C
-
-	for (int n = 0; n < 10; n++){
-
-		int data = 0xF8;
-		//HAL_StatusTypeDef HAL_I2C_Mem_Write(I2C_HandleTypeDef *hi2c, uint16_t DevAddress, uint16_t MemAddress, uint16_t MemAddSize, uint8_t *pData, uint16_t Size, uint32_t Timeout)
-		if (HAL_OK != HAL_I2C_Mem_Write(&hi2c, HTAddr, 0x0E, I2C_MEMADD_SIZE_8BIT, (data), 0x01, HAL_MAX_DELAY))
-		{
-			BSP_EPD_DisplayChar(80, 12, 'N');
-			BSP_EPD_DisplayChar(88, 12, 'M');
-			BSP_EPD_RefreshDisplay();
-		}
-
-
-
-
-		float temp = readTemp(&hi2c);
-		float humi = readHumi(&hi2c);
-
-		char snum[3];
-		char dnum[3];
-		for (int i = 0; i < 3; i++)
-		{
-			snum[i] = ' ';
-			dnum[i] = ' ';
-		}
-
-
-		snum[2] = ((int) humi % 10) + '0';
-		humi = humi / 10;
-		snum[1] = ((int) humi % 10) + '0';
-
-		dnum[2] = ((int) temp % 10) + '0';
-		temp = temp / 10;
-		dnum[1] = ((int) temp % 10) + '0';
-
-
-		clearDisp();
-		BSP_EPD_DisplayChar(72, 8, snum[0]);
-		BSP_EPD_DisplayChar(80, 8, snum[1]);
-		BSP_EPD_DisplayChar(88, 8, snum[2]);
-		BSP_EPD_DisplayChar(96, 8, '%');
-		BSP_EPD_DisplayChar(40, 12, dnum[0]);
-		BSP_EPD_DisplayChar(48, 12, dnum[1]);
-		BSP_EPD_DisplayChar(56, 12, dnum[2]);
-		BSP_EPD_DisplayChar(64, 12, '*');
-		BSP_EPD_DisplayChar(72, 12, 'C');
-		BSP_EPD_RefreshDisplay();
-		HAL_Delay(500);
-
-	}
-
+  while (1);
 }
 
+void I2C_Mem_Tx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size) {
+	while(I2C2->ISR & I2C_ISR_BUSY);
+
+	device_addr <<= 1;
+	uint16_t size = reg_addr_size + data_size;
+
+	I2C2->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RELOAD | I2C_CR2_AUTOEND | I2C_CR2_RD_WRN | I2C_CR2_START | I2C_CR2_STOP);
+	I2C2->CR2 |= (device_addr & I2C_CR2_SADD) | (size << I2C_CR2_NBYTES_Pos) | I2C_CR2_AUTOEND | I2C_CR2_START;
+
+	if(reg_addr_size == 2) {	// send reg_addr MSB
+		while(!(I2C2->ISR & I2C_ISR_TXIS));
+		I2C2->TXDR = ((reg_addr >> 8) & 0xFF);
+	}
+
+	while(!(I2C2->ISR & I2C_ISR_TXIS));	// send reg_addr LSB
+	I2C2->TXDR = (reg_addr & 0xFF);
+
+	uint8_t * data_pointer = data;
+	for(uint16_t tx_remaining = data_size; tx_remaining > 0; tx_remaining--) {
+		while(!(I2C2->ISR & I2C_ISR_TXIS));
+		I2C2->TXDR = *data_pointer;
+
+		data_pointer++;
+	}
+
+	while(!(I2C2->ISR & I2C_ISR_STOPF));
+	I2C2->ICR |= I2C_ICR_STOPCF;
+}
+
+void I2C_Mem_Rx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size) {
+	while(I2C2->ISR & I2C_ISR_BUSY);
+
+	device_addr <<= 1;
+
+	I2C2->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RELOAD | I2C_CR2_AUTOEND | I2C_CR2_RD_WRN | I2C_CR2_START | I2C_CR2_STOP);
+	I2C2->CR2 |= (device_addr & I2C_CR2_SADD) | (reg_addr_size << I2C_CR2_NBYTES_Pos) | I2C_CR2_START;
+
+	if(reg_addr_size == 2) {	// send reg_addr MSB
+		while(!(I2C2->ISR & I2C_ISR_TXIS));
+		I2C2->TXDR = ((reg_addr >> 8) & 0xFF);
+	}
+
+	while(!(I2C2->ISR & I2C_ISR_TXIS));	// send reg_addr LSB
+	I2C2->TXDR = (reg_addr & 0xFF);
+
+	while(!(I2C2->ISR & I2C_ISR_TC));	// wait for tx complete
+
+	I2C2->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RELOAD | I2C_CR2_AUTOEND | I2C_CR2_RD_WRN | I2C_CR2_START | I2C_CR2_STOP);
+	I2C2->CR2 |= (device_addr & I2C_CR2_SADD) | (data_size << I2C_CR2_NBYTES_Pos) | I2C_CR2_AUTOEND | I2C_CR2_START | I2C_CR2_RD_WRN;
 
 
+	uint8_t * data_pointer = data;
+	for(uint16_t tx_remaining = data_size; tx_remaining > 0; tx_remaining--) {
+		while(!(I2C2->ISR & I2C_ISR_RXNE));	// wait for read data
+		*data_pointer = I2C2->RXDR;
+
+		data_pointer++;
+	}
+
+	while(!(I2C2->ISR & I2C_ISR_STOPF));
+	I2C2->ICR |= I2C_ICR_STOPCF;
+}
+
+void I2C_Init() {
+    RCC->IOPENR |= RCC_IOPENR_GPIOBEN;	// GPIOB Clock enable
+
+    GPIOB->OSPEEDR |= (0x3 << GPIO_OSPEEDER_OSPEED10_Pos) | (0x3 << GPIO_OSPEEDER_OSPEED11_Pos); // very high speed
+    GPIOB->OTYPER |= GPIO_OTYPER_OT_10 | GPIO_OTYPER_OT_11;	// Open drain
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPD10_Msk | GPIO_PUPDR_PUPD11_Msk);	// clear pullup/pulldown
+    GPIOB->PUPDR |= (GPIO_PUPDR_PUPD10_0 | GPIO_PUPDR_PUPD11_0);		// Set pullup
+	GPIOB->AFR[1] &= ~(GPIO_AFRH_AFSEL10_Msk | GPIO_AFRH_AFSEL11_Msk);					// Clear PB10, PB11 Alternate Function Reg
+	GPIOB->AFR[1] |= (0x6 << GPIO_AFRH_AFSEL10_Pos) | (0x6 << GPIO_AFRH_AFSEL11_Pos);	// Set PB10, PB11 Alternate Function Reg to 0x6 (I2C2)
+	GPIOB->MODER &= ~(GPIO_MODER_MODE10 | GPIO_MODER_MODE11);							// Clear PB10, PB11 mode
+	GPIOB->MODER |= GPIO_MODER_MODE10_1 | GPIO_MODER_MODE11_1;							// Set PB10, PB11 mode to alternate 0b10
+
+    RCC->APB1ENR |= RCC_APB1ENR_I2C2EN;	// I2C2 clock enable
+
+    I2C2->CR1 &= ~I2C_CR1_PE;		// Disable I2C2
+    I2C2->TIMINGR = 0x00707CBB & 0xF0FFFFFFU; // 0xF0FFFFFFU = TIMING_CLEAR_MASK
+
+    I2C2->OAR1 &= ~I2C_OAR1_OA1EN_Msk; 	// Disable Own Address
+    I2C2->OAR1 = (I2C_OAR1_OA1EN | 0x0); // set own address and re-enable
+
+    I2C2->CR2 |= (I2C_CR2_AUTOEND | I2C_CR2_NACK);
+
+    I2C2->OAR2 &= ~I2C_OAR2_OA2EN_Msk;	// Disable own address 2
+
+    I2C2->CR1 |= I2C_CR1_PE;		// Enable I2C2
+}
+
+void printSOC(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
+
+	I2C_Mem_Rx(device_addr, reg_addr, reg_addr_size, data, data_size);
+//	uint8_t value;
+//	value = data[1];
+
+	Soc = (data[1]<<8) | data[0];
+
+//	printf("The battery state-of-charge is %d %",Soc);
+}
+
+void printVolt(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
+
+	I2C_Mem_Rx(device_addr, reg_addr, reg_addr_size, data, data_size);
+
+	Volt = (data[1]<<8) | data[0];
+
+//	printf("The battery Voltage is %d (mV)",Volt);
+}
+
+void printSOH(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
+
+	I2C_Mem_Rx(device_addr, reg_addr, reg_addr_size, data, data_size);
+
+	Soh = (data[1]<<8) | data[0];
+	sohPercent = Soh & 0x00FF;
+
+
+//	printf("The battery state-of-health is %d (%)",Soh);
+}
+
+void printRemCap(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
+
+	I2C_Mem_Rx(device_addr, reg_addr, reg_addr_size, data, data_size);
+
+	Rcap = (data[1]<<8) | data[0];
+//	Soh = Soh >> 8;
+//	sohPercent = Soh & 0x00FF;
+
+
+//	printf("The battery remaining capacity is %d (mAh)",Rcap);
+}
