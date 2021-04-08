@@ -11,20 +11,20 @@
 #include "stm32l0xx.h"
 #include "stm32l0538_discovery.h"
 #include "babysitter.h"
-//#include <SparkFunBQ27441.h>
 
 void I2C_Init();
 void I2C_Mem_Tx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 void I2C_Mem_Rx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 uint16_t BB_getSOC(void);
-void printVolt(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
-void printSOH(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
-void printRemCap(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+uint16_t BB_getVolt(void);
+uint16_t BB_getSOH(void);
+uint16_t BB_getRemCap(void);
 
 uint16_t Volt;
 uint16_t Soh;
 uint16_t sohPercent;
 uint16_t Rcap;
+uint16_t Soc;
 
 int main(void)
 {
@@ -53,17 +53,13 @@ int main(void)
   }
 
   // Get the battery state of charge from the Battery Babysitter (in %)
-  uint16_t soc = BB_getSOC();
-//	printf("The battery state-of-charge is %d %",soc);
+  Soc = BB_getSOC();
 
-  uint8_t volt[0];
-  printVolt(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_VOLTAGE, 1, volt, 2); // take battery babysitter Reads and returns the battery voltage (in mV)
+  Volt = BB_getVolt();
 
-  uint8_t soh[0];
-  printSOH(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_SOH, 1, soh, 2); // take battery babysitter Reads and returns the battery voltage (in mV)
+  Soh = BB_getSOH(); // take battery babysitter Reads and returns the battery voltage (in mV)
 
-  uint8_t rcap[0];
-  printRemCap(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_REM_CAPACITY, 1, rcap, 2); // take battery babysitter Reads and returns the remaining capacity (in mAh)
+  Rcap = BB_getRemCap(); // take battery babysitter Reads and returns the remaining capacity (in mAh)
 
 //
 //  I2C_Mem_Rx(0x32, 0x3F, 1, data, 1); // read temperature
@@ -172,38 +168,29 @@ void I2C_Init() {
 uint16_t BB_getSOC(void) {
 	uint8_t data[2];
 	I2C_Mem_Rx(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_SOC, 1, data, 2);
-	uint16_5 Soc = (data[1]<<8) | data[0];
+	uint16_t Soc = (data[1]<<8) | data[0];
 	return Soc;
 }
 
-void printVolt(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
+uint16_t BB_getVolt(void){
+	uint8_t data[2];
+	I2C_Mem_Rx(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_VOLTAGE, 1, data, 2);
+	uint16_t Volt = (data[1]<<8) | data[0];
+	return Volt;
 
-	I2C_Mem_Rx(device_addr, reg_addr, reg_addr_size, data, data_size);
-
-	Volt = (data[1]<<8) | data[0];
-
-//	printf("The battery Voltage is %d (mV)",Volt);
 }
 
-void printSOH(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
-
-	I2C_Mem_Rx(device_addr, reg_addr, reg_addr_size, data, data_size);
-
+uint16_t BB_getSOH(void){
+	uint8_t data[2];
+	I2C_Mem_Rx(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_SOH, 1, data, 2);
 	Soh = (data[1]<<8) | data[0];
 	sohPercent = Soh & 0x00FF;
-
-
-//	printf("The battery state-of-health is %d (%)",Soh);
+	return sohPercent;
 }
 
-void printRemCap(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size){
-
-	I2C_Mem_Rx(device_addr, reg_addr, reg_addr_size, data, data_size);
-
-	Rcap = (data[1]<<8) | data[0];
-//	Soh = Soh >> 8;
-//	sohPercent = Soh & 0x00FF;
-
-
-//	printf("The battery remaining capacity is %d (mAh)",Rcap);
+uint16_t BB_getRemCap(void){
+	uint8_t data[2];
+	I2C_Mem_Rx(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_REM_CAPACITY, 1, data, 2);
+	uint16_t Rcap = (data[1]<<8) | data[0];
+	return Rcap;
 }
