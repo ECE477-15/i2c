@@ -222,9 +222,9 @@ uint16_t BB_getRemCap(void){
 
 uint16_t getHDCTemp(void){
 	uint8_t data[2];
-	uint8_t command[2];
-//	I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, command, 1);
-//	I2C_Mem_Tx(HTAddr, TEMP_LOW, 1, command, 2);
+	uint8_t command[2] =  {0x01,0x00};
+	I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, command, 1);
+//	I2C_Mem_Tx(HTAddr, TEMP_LOW, 1, command[0], 2);
 	I2C_Mem_Rx(HTAddr, TEMP_LOW, 1, data, 2);
 	uint16_t temperature = (data[1]<<8) | data[0];
     temperature = (((float)(temperature) * 165) / 65536) - 40;
@@ -233,8 +233,8 @@ uint16_t getHDCTemp(void){
 
 uint16_t getHDCHumidity(void){
 	uint8_t data[2];
-	uint8_t command[2];
-//	I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, command, 1);
+	uint8_t command[3] = {0x01, 0x02 ,0x03};
+	I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, command, 1);
 //	I2C_Mem_Tx(HTAddr, HUMID_LOW, 1, command, 2);
 	I2C_Mem_Rx(HTAddr, HUMID_LOW, 1, data, 2);
 	uint16_t humidity = (data[1]<<8) | data[0];
@@ -247,11 +247,8 @@ void hdc2010_enable()
 {
 	// the startup sequence for single acquisition
     uint8_t value = 0;
-
     I2C_Mem_Tx(HTAddr, CONFIG, 1, &value, 1);
-//    I2C_Mem_Tx(HTAddr, TEMP_LOW, 1, &value, 1);
     I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, &value, 1);
-//    I2C_Mem_Tx(HTAddr, TEMP_LOW, 1, &value, 1);
 
 
 }
