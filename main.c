@@ -11,34 +11,47 @@
 #include "stm32l0xx.h"
 #include "stm32l0538_discovery.h"
 #include "babysitter.h"
+#include "hdc2010.h"
 
 void I2C_Init();
 void I2C_Mem_Tx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
 void I2C_Mem_Rx(uint16_t device_addr, uint16_t reg_addr, uint16_t reg_addr_size, uint8_t *data, uint16_t data_size);
+void hdc2010_enable();
 uint16_t BB_getSOC(void);
 uint16_t BB_getVolt(void);
 uint16_t BB_getSOH(void);
 uint16_t BB_getRemCap(void);
+uint16_t getHDCTemp(void);
+uint16_t getHDCHumidity(void);
 
 uint16_t Volt;
 uint16_t Soh;
 uint16_t sohPercent;
 uint16_t Rcap;
 uint16_t Soc;
+uint16_t temperature;
+uint16_t humidity;
 
 int main(void)
 {
   I2C_Init();
+  hdc2010_enable();
 
+//  uint8_t data[1] = {0xF8};
+//  I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, data, 1);
+//  data = data | INTERRUPT_DRDY;
+
+
+//
 //  uint8_t data[1] = {0xFF};
 //  I2C_Mem_Tx(0x32, 0x3D, 1, data, 1); // reset chip
 ////
 //  data[0] = 0x40;
 //  I2C_Mem_Tx(0x32, 0x00, 1, data, 1); // chip enable
-////
+//
 //  data[0] = 0x53;
 //  I2C_Mem_Tx(0x32, 0x36, 1, data, 1); // chip clock enable
-////
+//
 //  data[0] = 0xFF;
 //  I2C_Mem_Tx(0x32, 0x16, 1, data, 1); // turn on LED
 //
@@ -53,22 +66,34 @@ int main(void)
   }
 
   // Get the battery state of charge from the Battery Babysitter (in %)
-  Soc = BB_getSOC();
-
-  Volt = BB_getVolt();
-
-  Soh = BB_getSOH(); // take battery babysitter Reads and returns the battery voltage (in mV)
-
-  Rcap = BB_getRemCap(); // take battery babysitter Reads and returns the remaining capacity (in mAh)
-
+//  Soc = BB_getSOC();   // take battery babysitter Reads and returns the battery state-of-charge (in %)
 //
+//  Volt = BB_getVolt(); // take battery babysitter Reads and returns the battery voltage (in mV)
+//
+//  Soh = BB_getSOH();  // take battery babysitter Reads and returns the battery state-of-health (in %)
+//
+//  Rcap = BB_getRemCap(); // take battery babysitter Reads and returns the remaining capacity (in mAh)
+
+  // Start conversion
+//  uint8_t convert = 0;
+//  I2C_Mem_Tx(HTAddr, CONFIG, 1, &convert, 1); // Perform a 2 byte I2C Write Transaction
+//  I2C_Mem_Tx(HTAddr, TEMP_HIGH, 1, &convert, 1); // Perform a 2 byte I2C Write Transaction
+
+//  HAL_Delay(20);  // Instruct your MCU to NO-OP for a number of CPU cycles equivalent to 2 ms
+
+  temperature = getHDCTemp(); // take HDC2010 sensor reads and returns the room temperature (in degree Celsius)
+
+  humidity = getHDCHumidity();  // take HDC2010 sensor reads and returns the humidity ( in %)
+
+
+
 //  I2C_Mem_Rx(0x32, 0x3F, 1, data, 1); // read temperature
-//
+
   i = 0;
 	while(i < 100000) {
 		i++;
 	}
-//
+
 //  data[0] = 0xFF;
 //  I2C_Mem_Tx(0x32, 0x3D, 1, data, 1); // reset chip
 
@@ -193,4 +218,40 @@ uint16_t BB_getRemCap(void){
 	I2C_Mem_Rx(BQ72441_I2C_ADDRESS, BQ27441_COMMAND_REM_CAPACITY, 1, data, 2);
 	uint16_t Rcap = (data[1]<<8) | data[0];
 	return Rcap;
+}
+
+uint16_t getHDCTemp(void){
+	uint8_t data[2];
+	uint8_t command[2];
+//	I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, command, 1);
+//	I2C_Mem_Tx(HTAddr, TEMP_LOW, 1, command, 2);
+	I2C_Mem_Rx(HTAddr, TEMP_LOW, 1, data, 2);
+	uint16_t temperature = (data[1]<<8) | data[0];
+    temperature = (((float)(temperature) * 165) / 65536) - 40;
+	return temperature;
+}
+
+uint16_t getHDCHumidity(void){
+	uint8_t data[2];
+	uint8_t command[2];
+//	I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, command, 1);
+//	I2C_Mem_Tx(HTAddr, HUMID_LOW, 1, command, 2);
+	I2C_Mem_Rx(HTAddr, HUMID_LOW, 1, data, 2);
+	uint16_t humidity = (data[1]<<8) | data[0];
+	humidity = (float)(humidity)/( 65536 )* 100;
+	return humidity;
+
+}
+
+void hdc2010_enable()
+{
+	// the startup sequence for single acquisition
+    uint8_t value = 0;
+
+    I2C_Mem_Tx(HTAddr, CONFIG, 1, &value, 1);
+//    I2C_Mem_Tx(HTAddr, TEMP_LOW, 1, &value, 1);
+    I2C_Mem_Tx(HTAddr, MEASUREMENT_CONFIG, 1, &value, 1);
+//    I2C_Mem_Tx(HTAddr, TEMP_LOW, 1, &value, 1);
+
+
 }
